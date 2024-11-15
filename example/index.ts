@@ -1,8 +1,8 @@
-import { KakaoTalkBot, ReactionType, Events } from "../src";
+import { KakaoTalkBot, ReactionType, Events, Slash, Schema, Int } from "../src";
 
 const bot = KakaoTalkBot.create(this);
 
-bot.on(Events.MESSAGE, msg => {
+bot.on(Events.COMMAND, (msg, command) => {
     msg.channel
     msg.chat
 
@@ -11,27 +11,51 @@ bot.on(Events.MESSAGE, msg => {
         .catch(console.error);
 
     msg.react(ReactionType.CANCEL);
-    msg.react('laugh');
+    msg.react('check');
 
     msg.send({
         'templateArgs': {},
         'templateId': 3333
     });
+
+    msg.mentions
+
+    msg.send('hello world!');
 });
 
-bot.on(Events.DEBUG, msg => {
-    msg.reply('debug message');
+bot.on(Events.KICK, msg => {
+    if (msg.isLeaveMessage()) {
+        msg.leaveUser
+    }
+    else if (msg.isOpenChatKickedMessage()) {
+        msg.kickedUser
+    }
+    else if (msg.isOpenChat()) {
+        msg.kickedBy
+    }
 });
 
-bot.commandRootDir = '/sdcard/msgbot/commands';
+bot.once(Events.JOIN, msg => {});
 
-bot.commandRoot.push(Slash({
-    name: 'uqefiuwf',
-    description: 'ijwfoijwef',
-    schema: [
-        Int
-    ],
-    execute: (msg, [n]) => {
-        msg.send(n);
+bot.commandRoot = '/sdcard/msgbot/commands';
+
+bot.commands.register({
+    add: Slash({}),
+    math: {
+        sub: Slash({}),
+        mul: Slash({}),
+    }
+})
+
+bot.commands.register(Slash({
+    'name': 'test',
+    'description': 'test command',
+    'schema': Schema(Int),
+    'execute': (msg, [num]) => {
+        msg.send(`Number: ${num}`);
     }
 }));
+
+bot.on(Events.MESSAGE, msg => {
+    bot.runCommand(msg);
+});

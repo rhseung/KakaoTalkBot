@@ -2,6 +2,7 @@
   "name": "kakaotalkbot",
   "version": "1.0.0",
   "main": "src/index.js",
+  "type": "module",
   "directories": {
     "example": "example"
   },
@@ -12,8 +13,13 @@
   "author": "",
   "license": "MIT",
   "description": "",
-  "dependencies": {
+  "devDependencies": {
+    "driftless": "^2.0.3",
+    "nodeplotlib": "^1.1.2",
+    "tsx": "^4.19.1",
     "typed-emitter": "^2.1.0",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.4",
+    "zod": "^3.23.8"
   }
 }

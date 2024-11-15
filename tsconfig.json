@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",           // JavaScript version target
+    "module": "ESNext",           // Module system for TypeScript to ES modules
+    "declaration": true,          // Generate declaration files (.d.ts)
+    "strict": true,               // Enable all strict type-checking options
+    "moduleResolution": "node",   // Module resolution strategy
+    "esModuleInterop": true,      // Emit helpers for importing CommonJS modules
+    "skipLibCheck": true,         // Skip type checking for declaration files
+    "lib": ["ESNext"]
+  },
+  "include": ["examples/*.js", "src/**/*.ts", "api/android.d.ts", "api/api2.d.ts", "api/util.d.ts"],     // Include all TypeScript files in src folder
+  "exclude": ["node_modules", "dist", "**/*.test.ts"] // Exclude test and dist files
+}

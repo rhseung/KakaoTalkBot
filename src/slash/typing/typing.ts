@@ -1,19 +1,23 @@
-import { Chat } from "../api/db-manager/classes";
+import { Chat, User } from "../../../kakao_modules/db-manager/classes";
+import { Exception, TypeException } from "../../utils";
 
-type FallbackCallback<T> = (chat: Chat) => T;
+type FallbackCallback<T> = (chat: Chat) => T | null;
 
 export abstract class Type<T> {
-    private fallbackObj: { message?: string, callback?: FallbackCallback<T> }
+    private fallbackObj: { message?: string, callback?: FallbackCallback<T> } = {};
 
-    constructor() {
-        this.fallbackObj = {};
+    constructor() {};
+
+    abstract parse(value: this extends OptionalType<T> ? (this extends MentionType ? User : string) | undefined : (this extends MentionType ? User : string)): T | null;
+
+    isValid(value: this extends MentionType ? User : string): boolean {
+        return this.parse(value) !== null;
     }
 
-    abstract isValid(value: T): boolean;
-
-    abstract parse(value: string): T;
-
-    fallback(message: string, callback: FallbackCallback<T> = chat => this.parse(chat.text.trim())) {
+    fallback(
+        message: string,
+        callback: FallbackCallback<T> = chat => this.parse(chat.text.trim())
+    ) {
         this.fallbackObj.message = message;
         this.fallbackObj.callback = callback;
 
@@ -21,51 +25,50 @@ export abstract class Type<T> {
     }
 }
 
-export class ValidationError extends TypeError {
-    constructor(value: any, expected: string) {
-        super(`${value} unexpected type. Expected ${expected}`);
-        this.name = 'ValidationError';
+export class ValidationException extends TypeException {
+    constructor(value: any, type: string, suggestion?: string) {
+        super(value, type, suggestion);
     }
 }
 
 export class IntType extends Type<number> {
-    override isValid(value: number): boolean {
-        return Number.isInteger(value);
-    }
-
-    override parse(value: string): number {
+    override parse(value: this extends OptionalType<number> ? string | undefined : string): number | null {
         const val = parseFloat(value);
 
-        if (!this.isValid(val))
-            throw new ValidationError(value, 'integer');
+        if (isNaN(val))
+            return null;
+        else if (!Number.isInteger(val))
+            return null;
 
         return val;
     }
 }
 
 export class FloatType extends Type<number> {
-    override isValid(value: number): boolean {
-        return typeof value === 'number';
-    }
-
-    override parse(value: string): number {
+    override parse(value: this extends OptionalType<number> ? string | undefined : string): number | null {
         const val = parseFloat(value);
 
-        if (!this.isValid(val))
-            throw new ValidationError(value, 'float');
+        if (isNaN(val))
+            return null;
 
         return val;
     }
 }
 
 export class StrType extends Type<string> {
-    override isValid(value: string): boolean {
-        return typeof value === 'string';
-    }
+    override parse(value: this extends OptionalType<string> ? string | undefined : string): string | null {
+        // NOTE: 숫자적 문자열도 그냥 문자열로 할까?
+        if (!/^\D.*$/.test(value))
+            return null;
 
-    override parse(value: string): string {
-        if (!this.isValid(value))
-            throw new ValidationError(value, 'string');
+        return value;
+    }
+}
+
+export class MentionType extends Type<User> {
+    override parse(value: this extends OptionalType<User> ? User | undefined : User): User | null {
+        if (!(value instanceof User))
+            return null;
 
         return value;
     }
@@ -74,23 +77,15 @@ export class StrType extends Type<string> {
 export class OptionalType<T> extends Type<T | undefined> {
     constructor(private type: Type<T>, private defaultValue?: T) {
         super();
-
-        if (defaultValue !== undefined && !type.isValid(defaultValue))
-            throw new ValidationError(defaultValue, type.constructor.name);
     }
 
-    override isValid(value: T | undefined): boolean {
-        if (value !== undefined)
-            return this.type.isValid(value);
-        
-        return true;
-    }
-
-    override parse(value: string | undefined): T | undefined {
+    // TODO: optional이니까 value에 undefined가 들어올 수도 있음
+    parse(value: this extends OptionalType<T | undefined> ? string | undefined : string): T | null {
         if (value === undefined)
-            return this.defaultValue;
-        if (!this.isValid(value))
-            throw new ValidationError(value, this.type.constructor.name);
+            return this.defaultValue ?? null;
+
+        if (!this.type.isValid(value))
+            return null;
 
         return this.type.parse(value);
     }
@@ -104,34 +99,27 @@ export class UnionType extends Type<any> {
         this.types = types;
     }
 
-    override isValid(value) {
-        return this.types.some(type => type.isValid(value));
-    }
-
-    override parse(value) {
+    override parse(value: this extends OptionalType<any> ? string | undefined : string): any | null {
         const type = this.types.find(type => type.isValid(value));
+        
         if (type === undefined)
-            throw new ValidationError(value, this.types.map(type => type.constructor.name).join(', '));
+            return null;
 
         return type.parse(value);
     }
 }
 
-export class ChoiceType extends Type<any> {
-    private choices: Type<any>[];
+export class ChoiceType extends Type<string> {
+    private choices: string[];
 
-    constructor(...choices: Type<any>[]) {
+    constructor(...choices: string[]) {
         super();
         this.choices = choices;
     }
 
-    override isValid(value) {
-        return this.choices.includes(value);
-    }
-
-    override parse(value) {
-        if (!this.isValid(value))
-            throw new ValidationError(value, this.choices.join(', '));
+    override parse(value: this extends OptionalType<string> ? string | undefined : string): string | null {
+        if (!this.choices.includes(value))
+            return null;
 
         return value;
     }
@@ -142,15 +130,15 @@ export class AnnotatedType<T> extends Type<T> {
         super();
     }
 
-    override isValid(value: T): boolean {
-        return this.type.isValid(value) && this.condition(value);
-    }
+    override parse(value: this extends OptionalType<T> ? string | undefined : string): T | null {
+        const val = this.type.parse(value);
+        
+        if (val === null)
+            return null;
+        else if (!this.condition(val))
+            return null;
 
-    override parse(value: any): T {
-        if (!this.isValid(value))
-            throw new ValidationError(value, this.type.constructor.name);
-
-        return this.type.parse(value);
+        return val;
     }
 }
 
@@ -159,15 +147,12 @@ export class RestType<T> extends Type<T[]> {
         super();
     }
 
-    override isValid(value: T[]): boolean {
-        return value.every(v => this.type.isValid(v));
-    }
-
-    override parse(value: any): T[] {
+    // TODO: value에 여러 개가 들어오게 해야함.
+    override parse(value: this extends OptionalType<T[]> ? string | undefined : string): T[] | null {
         if (!Array.isArray(value))
-            throw new ValidationError(value, 'array');
+            throw new ValidationException(value, 'array');
         if (!this.isValid(value))
-            throw new ValidationError(value, this.type.constructor.name);
+            throw new ValidationException(value, this.type.constructor.name);
 
         return value.map(v => this.type.parse(v));
     }
@@ -176,6 +161,7 @@ export class RestType<T> extends Type<T[]> {
 export const Int = new IntType();
 export const Float = new FloatType();
 export const Str = new StrType();
+export const Mention = new MentionType();
 
 export const Optional = (type, defaultValue=undefined) => new OptionalType(type, defaultValue);
 export const Union = (...types) => new UnionType(...types);
